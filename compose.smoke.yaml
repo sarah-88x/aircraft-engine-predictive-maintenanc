@@ -1,0 +1,4 @@
+﻿services:
+  test:
+    image: busybox:1.36
+    command: ["sh", "-c", "echo bigdata-compose-ok && sleep 30"]

@@ -1,0 +1,15 @@
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = [
+    "E501",  # Line too long
+    "F401",  # Unused imports in scripts meant for dynamic access
+    "F841",  # Unused variables
+    "E402",  # Module level import not at top of file
+    "W292",  # No newline at end of file
+    "W293",  # Blank line contains whitespace
+    "F541",  # f-string without placeholders
+]

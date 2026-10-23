@@ -1,0 +1,79 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:13
+    container_name: airflow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - bigdata
+
+  airflow-webserver:
+    image: apache/airflow:2.9.1-python3.10
+    container_name: airflow-webserver
+    restart: unless-stopped
+    group_add: ["0"]
+    depends_on:
+      - postgres
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__FERNET_KEY: "${AIRFLOW_FERNET_KEY}"
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW_UID: "${AIRFLOW_UID}"
+      PROJECT_ROOT: /opt/airflow/project
+      CLICKHOUSE_USER: "${CLICKHOUSE_USER}"
+      CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD}"
+      _PIP_ADDITIONAL_REQUIREMENTS: "h5py==3.11.0"
+    volumes:
+      - ../airflow/dags:/opt/airflow/dags
+      - ../airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ../:/opt/airflow/project
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      
+      - "127.0.0.1:8085:8080"
+    command: webserver
+    networks:
+      - bigdata
+
+  airflow-scheduler:
+    image: apache/airflow:2.9.1-python3.10
+    container_name: airflow-scheduler
+    restart: unless-stopped
+    group_add: ["0"]
+    depends_on:
+      - postgres
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__FERNET_KEY: "${AIRFLOW_FERNET_KEY}"
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW_UID: "${AIRFLOW_UID}"
+      PROJECT_ROOT: /opt/airflow/project
+      CLICKHOUSE_USER: "${CLICKHOUSE_USER}"
+      CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD}"
+      _PIP_ADDITIONAL_REQUIREMENTS: "h5py==3.11.0"
+    volumes:
+      - ../airflow/dags:/opt/airflow/dags
+      - ../airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ../:/opt/airflow/project
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: scheduler
+    networks:
+      - bigdata
+
+networks:
+  bigdata:
+    external: true
+    name: compose_default
+volumes:
+  pgdata:

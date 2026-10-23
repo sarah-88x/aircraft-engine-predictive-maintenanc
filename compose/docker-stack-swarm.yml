@@ -1,0 +1,242 @@
+version: "3.8"
+
+services:
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    hostname: namenode
+    environment:
+      CLUSTER_NAME: aircraft-hdfs
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      CORE_CONF_hadoop_http_staticuser_user: root
+      HDFS_CONF_dfs_webhdfs_enabled: "true"
+      HDFS_CONF_dfs_permissions_enabled: "false"
+      HDFS_CONF_dfs_replication: "1"
+      HDFS_CONF_dfs_namenode_name_dir: file:///hadoop/dfs/name
+      HDFS_CONF_dfs_namenode_datanode_registration_ip___hostname___check: "false"
+    ports:
+      - target: 9870
+        published: 19870
+        protocol: tcp
+        mode: ingress
+    volumes:
+      - swarm_namenode_data:/hadoop/dfs/name
+      - /mnt/c/bigdata-aircraft/data/processed:/data/processed:ro
+    networks:
+      - bigdata_swarm
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname == DESKTOP-BCQ0R9U
+      restart_policy:
+        condition: on-failure
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    hostname: datanode
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870"
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      CORE_CONF_hadoop_http_staticuser_user: root
+      HDFS_CONF_dfs_permissions_enabled: "false"
+      HDFS_CONF_dfs_replication: "1"
+      HDFS_CONF_dfs_datanode_data_dir: file:///hadoop/dfs/data
+    volumes:
+      - swarm_datanode_data:/hadoop/dfs/data
+    networks:
+      - bigdata_swarm
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname == Sarah
+      restart_policy:
+        condition: on-failure
+
+  kafka:
+    image: apache/kafka:4.0.0
+    hostname: kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 3
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    ports:
+      - target: 9092
+        published: 19092
+        protocol: tcp
+        mode: ingress
+    volumes:
+      - swarm_kafka_data:/var/lib/kafka/data
+    networks:
+      - bigdata_swarm
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname == Sarah
+      restart_policy:
+        condition: on-failure
+
+  spark-master:
+    image: apache/spark:4.1.3-python3
+    hostname: spark-master
+    command:
+      - /opt/spark/bin/spark-class
+      - org.apache.spark.deploy.master.Master
+      - --host
+      - spark-master
+      - --port
+      - "7077"
+      - --webui-port
+      - "8080"
+    ports:
+      - target: 8080
+        published: 18080
+        protocol: tcp
+        mode: ingress
+    environment:
+      PYTHONPATH: /opt/pylibs
+      CLICKHOUSE_USER: "analytics"
+      CLICKHOUSE_PASSWORD: "Red-Host"
+    volumes:
+      - /mnt/c/bigdata-aircraft/scripts:/app/scripts:ro
+      - /mnt/c/bigdata-aircraft/pylibs:/opt/pylibs:ro
+      - /mnt/c/bigdata-aircraft/data/processed:/app/data/processed:ro
+      - /mnt/c/bigdata-aircraft/jars/spark-sql-kafka-0-10_2.13-4.1.3.jar:/opt/spark/jars/spark-sql-kafka-0-10_2.13-4.1.3.jar:ro
+      - /mnt/c/bigdata-aircraft/jars/spark-token-provider-kafka-0-10_2.13-4.1.3.jar:/opt/spark/jars/spark-token-provider-kafka-0-10_2.13-4.1.3.jar:ro
+      - /mnt/c/bigdata-aircraft/jars/kafka-clients-3.9.1.jar:/opt/spark/jars/kafka-clients-3.9.1.jar:ro
+      - /mnt/c/bigdata-aircraft/jars/commons-pool2-2.12.1.jar:/opt/spark/jars/commons-pool2-2.12.1.jar:ro
+    networks:
+      - bigdata_swarm
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname == DESKTOP-BCQ0R9U
+      restart_policy:
+        condition: on-failure
+
+  spark-worker-msi:
+    image: apache/spark:4.1.3-python3
+    hostname: spark-worker-msi
+    command:
+      - /opt/spark/bin/spark-class
+      - org.apache.spark.deploy.worker.Worker
+      - spark://spark-master:7077
+      - --cores
+      - "2"
+      - --memory
+      - 2G
+      - --webui-port
+      - "8081"
+    ports:
+      - target: 8081
+        published: 18081
+        protocol: tcp
+        mode: ingress
+    networks:
+      - bigdata_swarm
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname == DESKTOP-K809CC1
+      restart_policy:
+        condition: on-failure
+
+  spark-worker-lenovo:
+    image: apache/spark:4.1.3-python3
+    hostname: spark-worker-lenovo
+    command:
+      - /opt/spark/bin/spark-class
+      - org.apache.spark.deploy.worker.Worker
+      - spark://spark-master:7077
+      - --cores
+      - "2"
+      - --memory
+      - 1G
+      - --webui-port
+      - "8082"
+    ports:
+      - target: 8082
+        published: 18082
+        protocol: tcp
+        mode: ingress
+    networks:
+      - bigdata_swarm
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname == Sarah
+      restart_policy:
+        condition: on-failure
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:26.9.19.9
+    hostname: clickhouse
+    environment:
+      CLICKHOUSE_DB: "aircraft"
+      CLICKHOUSE_USER: "analytics"
+      CLICKHOUSE_PASSWORD: "Red-Host"
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ports:
+      - target: 8123
+        published: 18123
+        protocol: tcp
+        mode: ingress
+    volumes:
+      - swarm_clickhouse_data:/var/lib/clickhouse
+    networks:
+      - bigdata_swarm
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname == DESKTOP-K809CC1
+      restart_policy:
+        condition: on-failure
+
+  superset:
+    image: apache/superset:3.1.0
+    hostname: superset
+    ports:
+      - target: 8088
+        published: 18088
+        protocol: tcp
+        mode: ingress
+    environment:
+      SUPERSET_SECRET_KEY: "aircraft_secret_key_predictive_maintenance"
+    networks:
+      - bigdata_swarm
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname == DESKTOP-BCQ0R9U
+      restart_policy:
+        condition: on-failure
+
+networks:
+  bigdata_swarm:
+    driver: overlay
+    attachable: true
+    driver_opts:
+      com.docker.network.driver.mtu: "1200"
+
+volumes:
+  swarm_namenode_data:
+  swarm_datanode_data:
+  swarm_kafka_data:
+  swarm_clickhouse_data:
